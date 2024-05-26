@@ -181,11 +181,11 @@ _M.display_channel = function(inBuf, outBuf)
         :totable()
 
     vim.ui.select(chans, {}, function(item)
-        local result = _M.parse_discord_uri(item)
+        local result = discord.parse_discord_uri(item)
         if result == nil then
             return
         end
-        local server, channel, buf_type = _M.unpack_uri_result(result)
+        local server, channel, buf_type = discord.unpack_uri_result(result)
 
         local bufPair = discord.find_server_channel_buf_pair(server.id, channel.id)
 

@@ -210,6 +210,13 @@ _M.open_channel_list = function (server_id)
 
     local chan_buf = vim.api.nvim_create_buf(true, false)
 
+    vim.keymap.set("n", "<CR>", function ()
+        --yes ik this is a private method shush, it's convinient
+        local url = vim.ui._get_url()
+        local IN, OUT = discord.open_uri(url)
+        _M.display_channel(IN, OUT)
+    end, { buffer = chan_buf })
+
     vim.api.nvim_set_option_value("filetype", "markdown", {
         buf = chan_buf
     })

@@ -28,7 +28,7 @@ _M.setup = function (opts)
         pattern = "discord://*",
         callback = function()
             local name = vim.api.nvim_buf_get_name(0)
-            if not data.started then
+            if not discord.has_started() then
                 discord.start(name)
             else
                 discord.open_uri(name)
@@ -36,6 +36,12 @@ _M.setup = function (opts)
         end
     })
 
+    events.listen("TYPING_START", function (event)
+        local member = members.get_member_in_server(event.guild_id, event.user_id)
+        if member ~= nil then
+            vim.notify(member.user.global_name .. " has started typing", vim.log.levels.INFO, {})
+        end
+    end)
 
     events.listen(events.Events.READY, function(event)
         vim.notify("You are logged in", vim.log.levels.INFO, {})
@@ -139,6 +145,89 @@ _M.setup = function (opts)
                 vim.api.nvim_win_set_cursor(output_win, { vim.api.nvim_buf_line_count(buffers.output_buf), 0 })
             end
         end)
+end
+
+local function _display_channel(inBuf, outBuf)
+    vim.cmd.tabnew()
+    vim.api.nvim_win_set_buf(0, inBuf)
+    vim.api.nvim_open_win(outBuf, false, {
+        split = 'above',
+        win = 0
+    })
+end
+
+---Opens a new tab with a split, top window is output, bottom window is input
+---
+---if both inBuf AND outBuf are provided
+---this function simply opens a new tab and splits with topsplit being output buf
+---bottom split being input buf
+---@param inBuf buffer
+---@param outBuf buffer
+_M.display_channel = function(inBuf, outBuf)
+    --if both are provided simply open a tab to display the buffers
+    --
+    --this makes it easy to call open_channel and put the result directly into display_channel
+    if inBuf ~= nil and outBuf ~= nil then
+        _display_channel(inBuf, outBuf)
+        return
+    end
+
+    local chans = vim.iter(vim.api.nvim_list_bufs())
+        :filter(vim.api.nvim_buf_is_valid)
+        :map(vim.api.nvim_buf_get_name)
+        :filter(function(name)
+            return vim.startswith(name, "discord://")
+        end)
+        :totable()
+
+    vim.ui.select(chans, {}, function(item)
+        local result = _M.parse_discord_uri(item)
+        if result == nil then
+            return
+        end
+        local server, channel, buf_type = _M.unpack_uri_result(result)
+
+        local bufPair = discord.find_server_channel_buf_pair(server.id, channel.id)
+
+        _display_channel(bufPair.IN, bufPair.OUT)
+    end)
+end
+
+_M.open_channel_list = function (server_id)
+    if server_id == nil then
+        server_id = discord.get_focused_server_id()
+    end
+    if server_id == nil then
+        vim.notify("Could not open channel list, unknown server", vim.log.levels.ERROR)
+        return
+    end
+
+    local channels = discord.channels.get_channels_in_server(server_id)
+    if channels == nil then
+        vim.notify("No channels", vim.log.levels.ERROR, {})
+        return
+    end
+
+    local chan_buf = vim.api.nvim_create_buf(true, false)
+
+    vim.api.nvim_set_option_value("filetype", "markdown", {
+        buf = chan_buf
+    })
+
+    local chan_win = vim.api.nvim_open_win(chan_buf, true, {
+        split = 'left'
+    })
+
+    for i = 1, #channels do
+        --set_lines is 0indexed, i starts at 1, so subtract 1
+        local chan = channels[i]
+        if chan.type ~= 0 then
+            goto continue
+        end
+        local link = "discord://id=" .. server_id .. "/" .. chan.name
+        vim.api.nvim_buf_set_lines(chan_buf, i - 1, i - 1 + 1, false, { "[" .. channels[i].name .. "](" .. link .. ")" })
+        ::continue::
+    end
 end
 
 return _M
